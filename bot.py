@@ -49,11 +49,56 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Нічого не знайшов 😢")
 
+# async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     query = update.callback_query
+#     await query.answer()
+#     movie_id = query.data.split("_")[1]
+
+#     url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&language=uk&append_to_response=videos"
+#     movie = requests.get(url).json()
+
+#     title = movie["title"]
+#     overview = movie["overview"]
+#     poster = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
+
+#     await query.message.reply_photo(poster, caption=f"🎬 {title}\n\n{overview}")
+
+#     videos = movie.get("videos", {}).get("results", [])
+#     trailer_url = None
+#     for video in videos:
+#         if video["type"] == "Trailer" and video["site"] == "YouTube":
+#             trailer_url = f"https://www.youtube.com/watch?v={video['key']}"
+#             break
+
+#     if trailer_url is None:
+#         await query.message.reply_text("Трейлер не знайдено 😢")
+#         return
+
+#     trailer_path = os.path.join(TMPDIR, f"{movie_id}_trailer.mp4")
+
+#     ydl_opts = {
+#         'format': 'best[ext=mp4]/best',
+#         'outtmpl': trailer_path,
+#         'quiet': True,
+#         'no_warnings': True,
+#     }
+
+#     try:
+#         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+#             ydl.download([trailer_url])
+#     except Exception as e:
+#         await query.message.reply_text(f"Помилка завантаження трейлера: {e}")
+#         return
+
+#     with open(trailer_path, 'rb') as video_file:
+#         await query.message.reply_video(video=video_file, supports_streaming=True)
+
 async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     movie_id = query.data.split("_")[1]
 
+    # Завантажуємо деталі фільму з відео
     url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&language=uk&append_to_response=videos"
     movie = requests.get(url).json()
 
@@ -61,37 +106,59 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     overview = movie["overview"]
     poster = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
 
+    # Надсилаємо постер і опис
     await query.message.reply_photo(poster, caption=f"🎬 {title}\n\n{overview}")
 
     videos = movie.get("videos", {}).get("results", [])
     trailer_url = None
+
+    # Шукаємо трейлер
     for video in videos:
         if video["type"] == "Trailer" and video["site"] == "YouTube":
             trailer_url = f"https://www.youtube.com/watch?v={video['key']}"
             break
 
-    if trailer_url is None:
+    # Якщо трейлер є — качаємо і надсилаємо
+    if trailer_url:
+        await query.message.reply_text("🎞️ Завантажую трейлер...")
+        trailer_path = os.path.join(TMPDIR, f"{movie_id}_trailer.mp4")
+
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',
+            'outtmpl': trailer_path,
+            'quiet': True,
+            'no_warnings': True,
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([trailer_url])
+
+            with open(trailer_path, 'rb') as video_file:
+                await query.message.reply_video(video=video_file, supports_streaming=True)
+
+        except Exception as e:
+            await query.message.reply_text(f"Помилка завантаження трейлера: {e}")
+
+    else:
         await query.message.reply_text("Трейлер не знайдено 😢")
-        return
 
-    trailer_path = os.path.join(TMPDIR, f"{movie_id}_trailer.mp4")
+    # Шукаємо інші відео з YouTube (макс 3)
+    yt_videos = []
+    for video in videos:
+        if video["site"] == "YouTube":
+            yt_videos.append(f"📺 {video['type']}: https://www.youtube.com/watch?v={video['key']}")
+            if len(yt_videos) == 3:
+                break
 
-    ydl_opts = {
-        'format': 'best[ext=mp4]/best',
-        'outtmpl': trailer_path,
-        'quiet': True,
-        'no_warnings': True,
-    }
+    if yt_videos:
+        await query.message.reply_text("🎬 Додаткові відео по фільму:")
+        for vid in yt_videos:
+            await query.message.reply_text(vid)
+    else:
+        await query.message.reply_text("Жодних додаткових відео по цьому фільму не знайдено 😢")
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([trailer_url])
-    except Exception as e:
-        await query.message.reply_text(f"Помилка завантаження трейлера: {e}")
-        return
 
-    with open(trailer_path, 'rb') as video_file:
-        await query.message.reply_video(video=video_file, supports_streaming=True)
 
 async def delete_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
