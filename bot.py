@@ -124,10 +124,12 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         trailer_path = os.path.join(TMPDIR, f"{movie_id}_trailer.mp4")
 
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',
+            'format': 'bestvideo+bestaudio/best',
+            'merge_output_format': 'mp4',
             'outtmpl': trailer_path,
             'quiet': True,
             'no_warnings': True,
+            'ffmpeg_location': ffmpeg_path,
         }
 
         try:
