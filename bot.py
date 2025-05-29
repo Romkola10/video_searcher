@@ -2,11 +2,14 @@ import os
 import ffmpeg
 import requests
 import yt_dlp
+import yt_dlp
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, filters,
     CallbackQueryHandler, ConversationHandler, ContextTypes
 )
+logging.basicConfig(level=logging.INFO)
 
 # Змінні оточення для Railway
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
