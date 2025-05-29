@@ -139,6 +139,14 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Відмінив.")
 
+async def check_ffmpeg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True)
+    ffmpeg_path = result.stdout.strip()
+    if ffmpeg_path:
+        await update.message.reply_text(f"FFmpeg знайдено тут: {ffmpeg_path}")
+    else:
+        await update.message.reply_text("FFmpeg не знайдено 😢")
+
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
@@ -151,6 +159,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(conv_handler)
     app.add_handler(CallbackQueryHandler(movie_selected, pattern="^movie_"))
+    app.add_handler(CommandHandler("ffmpeg", check_ffmpeg))
 
     app.run_polling()
 
