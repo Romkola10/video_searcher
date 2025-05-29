@@ -130,6 +130,8 @@ async def delete_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Відмінив.")
 
+print(f"TELEGRAM_TOKEN: {TELEGRAM_TOKEN}")
+
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
