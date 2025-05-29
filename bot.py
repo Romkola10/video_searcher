@@ -107,12 +107,12 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
      # Логування шляху до ffmpeg
-    ffmpeg_path = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True).stdout.strip()
-    logging.info(f"ffmpeg path: {ffmpeg_path}")
+    # ffmpeg_path = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True).stdout.strip()
+    # logging.info(f"ffmpeg path: {ffmpeg_path}")
 
-    if not ffmpeg_path:
-        await query.message.reply_text("FFmpeg не знайдено на сервері, трейлер не завантажується.")
-        return
+    # if not ffmpeg_path:
+    #     await query.message.reply_text("FFmpeg не знайдено на сервері, трейлер не завантажується.")
+    #     return
 
     trailer_path = os.path.join(TMPDIR, f"{movie_id}_trailer.mp4")
 
