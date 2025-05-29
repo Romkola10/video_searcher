@@ -58,33 +58,37 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title = movie["title"]
     overview = movie["overview"]
     poster = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
-
     await query.message.reply_photo(poster, caption=f"🎬 {title}\n\n{overview}")
 
-    # Знаходимо трейлер
-    trailers = movie.get("videos", {}).get("results", [])
-    youtube_key = None
-    for v in trailers:
-        if v["type"] == "Trailer" and v["site"] == "YouTube":
-            youtube_key = v["key"]
-            break
+    # Пошук трейлера
+    videos = movie.get("videos", {}).get("results", [])
+    trailer = next((v for v in videos if v["type"] == "Trailer" and v["site"] == "YouTube"), None)
 
-    if youtube_key:
-        await query.message.reply_text("Завантажую трейлер 🎞️ ...")
-        video_url = f"https://www.youtube.com/watch?v={youtube_key}"
-        trailer_path = os.path.join(VIDEO_FOLDER, f"{query.from_user.id}_trailer.mp4")
+    if trailer:
+        video_url = f"https://www.youtube.com/watch?v={trailer['key']}"
+        user_id = query.from_user.id
+        trailer_path = os.path.join(CUT_FOLDER, f"{user_id}_trailer.mp4")
 
+        # Завантаження трейлера
         ydl_opts = {
             'outtmpl': trailer_path,
-            'format': 'best[ext=mp4]',
+            'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
+            'merge_output_format': 'mp4',
+            'noplaylist': True,
+            'quiet': True,
         }
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
 
-        await query.message.reply_video(video=open(trailer_path, 'rb'))
-        os.remove(trailer_path)
+        # Надсилання трейлера
+        await context.bot.send_video(chat_id=query.message.chat_id, video=open(trailer_path, 'rb'))
+        await query.message.reply_text("Трейлер завантажено 🎥")
     else:
-        await query.message.reply_text("На жаль, трейлер не знайдено 😢")
+        await query.message.reply_text("На жаль, трейлеру не знайдено 😢")
+
+    user_data[query.from_user.id] = {"movie_title": title}
+    return SELECT_VIDEO
 
 async def delete_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
