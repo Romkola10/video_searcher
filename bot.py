@@ -78,7 +78,7 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'outtmpl': trailer_path,
             'format': 'best[ext=mp4]',
         }
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
 
         await query.message.reply_video(video=open(trailer_path, 'rb'))
