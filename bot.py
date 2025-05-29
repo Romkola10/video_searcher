@@ -1,7 +1,7 @@
 import os
 import ffmpeg
 import requests
-import youtube_dl
+import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, filters,
