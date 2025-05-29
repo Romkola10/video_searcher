@@ -66,26 +66,33 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if trailer:
         video_url = f"https://www.youtube.com/watch?v={trailer['key']}"
+        await query.message.reply_text(f"🔍 Знайдено трейлер: {video_url}")
+        logging.info(f"Trailer URL: {video_url}")
+
         user_id = query.from_user.id
         trailer_path = os.path.join(CUT_FOLDER, f"{user_id}_trailer.mp4")
 
-        # Завантаження трейлера
         ydl_opts = {
             'outtmpl': trailer_path,
-            'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
             'merge_output_format': 'mp4',
             'noplaylist': True,
             'quiet': True,
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([video_url])
+        try:
+            await query.message.reply_text("⬇️ Завантажую трейлер...")
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([video_url])
 
-        # Надсилання трейлера
-        await context.bot.send_video(chat_id=query.message.chat_id, video=open(trailer_path, 'rb'))
-        await query.message.reply_text("Трейлер завантажено 🎥")
+            await context.bot.send_video(chat_id=query.message.chat_id, video=open(trailer_path, 'rb'))
+            await query.message.reply_text("✅ Трейлер завантажено!")
+        except Exception as e:
+            await query.message.reply_text(f"❌ Помилка завантаження трейлера: {e}")
+            logging.error(f"Trailer download error: {e}")
     else:
-        await query.message.reply_text("На жаль, трейлеру не знайдено 😢")
+        await query.message.reply_text("🚫 Трейлер не знайдено 😢")
+        logging.info("No trailer found.")
 
     user_data[query.from_user.id] = {"movie_title": title}
     return SELECT_VIDEO
