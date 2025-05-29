@@ -2,6 +2,7 @@ import os
 import ffmpeg
 import requests
 import logging
+import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, filters,
@@ -53,26 +54,62 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in search_movie: {e}")
         await update.message.reply_text("Вибач, сталася помилка при пошуку фільму.")
 
-async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        query = update.callback_query
-        await query.answer()
-        movie_id = query.data.split("_")[1]
+async def movie_selected(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    movie_id = query.data.split("_")[1]
 
-        url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&language=uk"
-        movie = requests.get(url).json()
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&language=uk"
+    movie = requests.get(url).json()
 
-        title = movie["title"]
-        overview = movie["overview"]
-        poster = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
+    title = movie["title"]
+    overview = movie["overview"]
+    poster = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
 
-        await query.message.reply_photo(poster, caption=f"🎬 {title}\n\n{overview}\n\nНадішли мені відеофайл 🎥")
+    # надсилаємо постер
+    query.message.reply_photo(poster)
 
-        user_data[query.from_user.id] = {"movie_title": title}
-        return SELECT_VIDEO
-    except Exception as e:
-        logger.error(f"Error in movie_selected: {e}")
-        await update.callback_query.message.reply_text("Сталася помилка при виборі фільму.")
+    # надсилаємо опис
+    query.message.reply_text(f"🎬 *{title}*\n\n_{overview}_", parse_mode='Markdown')
+
+    # шукаємо трейлер
+    videos_url = f"https://api.themoviedb.org/3/movie/{movie_id}/videos?api_key={TMDB_API_KEY}&language=uk"
+    videos = requests.get(videos_url).json()
+
+    youtube_links = []
+    for video in videos.get("results", []):
+        if video["site"] == "YouTube" and video["type"] in ["Trailer", "Teaser"]:
+            youtube_links.append(f"https://www.youtube.com/watch?v={video['key']}")
+
+    if youtube_links:
+        trailer_url = youtube_links[0]
+        query.message.reply_text("Завантажую трейлер 🎞️...")
+
+        trailer_path = os.path.join(TMPDIR, f"{query.from_user.id}_trailer.mp4")
+        ydl_opts = {
+            'format': 'best[ext=mp4]',
+            'outtmpl': trailer_path,
+            'quiet': True
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([trailer_url])
+
+            context.bot.send_video(chat_id=query.message.chat_id, video=open(trailer_path, 'rb'), supports_streaming=True)
+            os.remove(trailer_path)
+
+        except Exception as e:
+            query.message.reply_text(f"Не вдалося завантажити трейлер: {e}")
+
+    else:
+        query.message.reply_text("На жаль, трейлеру не знайшло 😢")
+
+    # пропонуємо користувачу відправити своє відео
+    query.message.reply_text("Тепер надішли мені відеофайл 🎥, який хочеш обрізати")
+
+    user_data[query.from_user.id] = {"movie_title": title}
+    return SELECT_VIDEO
 
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
