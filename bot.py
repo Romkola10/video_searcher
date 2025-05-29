@@ -1,6 +1,5 @@
 import os
 import requests
-import subprocess
 import yt_dlp
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -11,10 +10,23 @@ from telegram.ext import (
 
 logging.basicConfig(level=logging.INFO)
 
+# Змінні оточення для Railway
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
+# Тимчасові папки
 TMPDIR = os.getenv("TMPDIR", "/tmp")
+VIDEO_FOLDER = os.path.join(TMPDIR, "videos")
+CUT_FOLDER = os.path.join(TMPDIR, "cuts")
+
+os.makedirs(VIDEO_FOLDER, exist_ok=True)
+os.makedirs(CUT_FOLDER, exist_ok=True)
+
+# Стани для ConversationHandler
+SELECT_VIDEO, WAIT_FOR_TIME = range(2)
+
+# Дані користувача
+user_data = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привіт! Напиши назву фільму 🎥")
@@ -37,50 +49,6 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Нічого не знайшов 😢")
 
-# async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-#     query = update.callback_query
-#     await query.answer()
-#     movie_id = query.data.split("_")[1]
-
-#     url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&language=uk&append_to_response=videos"
-#     movie = requests.get(url).json()
-
-#     title = movie["title"]
-#     overview = movie["overview"]
-#     poster = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
-
-#     await query.message.reply_photo(poster, caption=f"🎬 {title}\n\n{overview}")
-
-#     videos = movie.get("videos", {}).get("results", [])
-#     trailer_url = None
-#     for video in videos:
-#         if video["type"] == "Trailer" and video["site"] == "YouTube":
-#             trailer_url = f"https://www.youtube.com/watch?v={video['key']}"
-#             break
-
-#     if not trailer_url:
-#         await query.message.reply_text("Трейлер не знайдено 😢")
-#         return
-
-#     trailer_path = os.path.join(TMPDIR, f"{movie_id}_trailer.mp4")
-
-#     ydl_opts = {
-#         'format': 'best',          # Просто найкращий формат (без міксування)
-#         'outtmpl': trailer_path,
-#         'quiet': True,
-#         'no_warnings': True,
-#     }
-
-#     try:
-#         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-#             ydl.download([trailer_url])
-#     except Exception as e:
-#         await query.message.reply_text(f"Помилка завантаження трейлера: {e}")
-#         return
-
-#     with open(trailer_path, 'rb') as video_file:
-#         await query.message.reply_video(video=video_file, supports_streaming=True)
-
 async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -102,25 +70,17 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
             trailer_url = f"https://www.youtube.com/watch?v={video['key']}"
             break
 
-    if not trailer_url:
+    if trailer_url is None:
         await query.message.reply_text("Трейлер не знайдено 😢")
         return
-
-     # Логування шляху до ffmpeg
-    # ffmpeg_path = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True).stdout.strip()
-    # logging.info(f"ffmpeg path: {ffmpeg_path}")
-
-    # if not ffmpeg_path:
-    #     await query.message.reply_text("FFmpeg не знайдено на сервері, трейлер не завантажується.")
-    #     return
 
     trailer_path = os.path.join(TMPDIR, f"{movie_id}_trailer.mp4")
 
     ydl_opts = {
-    'format': 'best[ext=mp4]/best',
-    'outtmpl': trailer_path,
-    'quiet': True,
-    'no_warnings': True,
+        'format': 'best[ext=mp4]/best',
+        'outtmpl': trailer_path,
+        'quiet': True,
+        'no_warnings': True,
     }
 
     try:
@@ -133,17 +93,21 @@ async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(trailer_path, 'rb') as video_file:
         await query.message.reply_video(video=video_file, supports_streaming=True)
 
+async def delete_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    video_path = user_data.get(user_id, {}).get("video_path")
+    cut_path = user_data.get(user_id, {}).get("cut_path")
+
+    if video_path and os.path.exists(video_path):
+        os.remove(video_path)
+    if cut_path and os.path.exists(cut_path):
+        os.remove(cut_path)
+
+    await update.message.reply_text("Відео та уривок видалено з сервера ✅")
+    user_data.pop(user_id, None)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Відмінив.")
-
-async def check_ffmpeg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True)
-    ffmpeg_path = result.stdout.strip()
-    if ffmpeg_path:
-        await update.message.reply_text(f"FFmpeg знайдено тут: {ffmpeg_path}")
-    else:
-        await update.message.reply_text("FFmpeg не знайдено 😢")
 
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
@@ -157,7 +121,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(conv_handler)
     app.add_handler(CallbackQueryHandler(movie_selected, pattern="^movie_"))
-    app.add_handler(CommandHandler("ffmpeg", check_ffmpeg))
+    app.add_handler(CommandHandler("delete", delete_files))
 
     app.run_polling()
 
