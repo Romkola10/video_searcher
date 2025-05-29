@@ -1,18 +1,15 @@
 import os
-import ffmpeg
+import subprocess
 import requests
 import yt_dlp
 import logging
-import os
-import yt_dlp
-import subprocess
-# from telegram import Update
-# from telegram.ext import CallbackContext
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, filters,
     CallbackQueryHandler, ConversationHandler, ContextTypes
 )
+
 logging.basicConfig(level=logging.INFO)
 
 # Змінні оточення для Railway
@@ -44,9 +41,9 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if response.get("results"):
         keyboard = []
         for movie in response["results"][:5]:
-            title = movie["title"]
+            title = movie.get("title", "Невідома назва")
             year = movie.get("release_date", "????")[:4]
-            movie_id = movie["id"]
+            movie_id = movie.get("id")
             keyboard.append([InlineKeyboardButton(f"{title} ({year})", callback_data=f"movie_{movie_id}")])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -54,30 +51,35 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Нічого не знайшов 😢")
 
-async def movie_selected(update: Update, context: ContextTypes):
+async def movie_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     movie_id = query.data.split("_")[1]
 
-    url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&language=uk"
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&language=uk&append_to_response=videos"
     movie = requests.get(url).json()
 
-    title = movie["title"]
-    overview = movie["overview"]
-    poster = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
-
-    # Відправляємо афішу з описом
-    await query.message.reply_photo(poster, caption=f"🎬 {title}\n\n{overview}")
+    title = movie.get("title", "Невідома назва")
+    overview = movie.get("overview", "Опис відсутній")
+    poster_path = movie.get('poster_path')
+    if poster_path:
+        poster = f"https://image.tmdb.org/t/p/w500{poster_path}"
+        try:
+            await query.message.reply_photo(poster, caption=f"🎬 {title}\n\n{overview}")
+        except Exception as e:
+            await query.message.reply_text(f"Не вдалося відправити афішу: {e}")
+    else:
+        await query.message.reply_text(f"🎬 {title}\n\n{overview}\n\n(Афіша відсутня)")
 
     # Знаходимо трейлер
     videos = movie.get("videos", {}).get("results", [])
     trailer_url = None
     for video in videos:
-        if video["type"] == "Trailer" and video["site"] == "YouTube":
-            trailer_url = f"https://www.youtube.com/watch?v={video['key']}"
+        if video.get("type") == "Trailer" and video.get("site") == "YouTube":
+            trailer_url = f"https://www.youtube.com/watch?v={video.get('key')}"
             break
 
-    if trailer_url is None:
+    if not trailer_url:
         await query.message.reply_text("Трейлер не знайдено 😢")
         return
 
@@ -87,7 +89,6 @@ async def movie_selected(update: Update, context: ContextTypes):
         await query.message.reply_text("FFmpeg не знайдено на сервері, трейлер не завантажується.")
         return
 
-    # Шлях для збереження трейлера
     trailer_path = os.path.join(TMPDIR, f"{movie_id}_trailer.mp4")
 
     ydl_opts = {
@@ -105,12 +106,11 @@ async def movie_selected(update: Update, context: ContextTypes):
         await query.message.reply_text(f"Помилка завантаження трейлера: {e}")
         return
 
-    # Відправляємо трейлер у чат
-    with open(trailer_path, 'rb') as video_file:
-        await query.message.reply_video(video=video_file, supports_streaming=True)
-
-    # Тут можна додати подальші дії (наприклад, чекати відео для вирізки і т.п.)
-
+    try:
+        with open(trailer_path, 'rb') as video_file:
+            await query.message.reply_video(video=video_file, supports_streaming=True)
+    except Exception as e:
+        await query.message.reply_text(f"Помилка відправки трейлера: {e}")
 
 async def delete_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
