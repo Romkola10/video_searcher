@@ -2,8 +2,12 @@ import os
 import ffmpeg
 import requests
 import yt_dlp
-import yt_dlp
 import logging
+import os
+import yt_dlp
+import subprocess
+# from telegram import Update
+# from telegram.ext import CallbackContext
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, filters,
@@ -50,7 +54,7 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Нічого не знайшов 😢")
 
-async def movie_selected(update: Update, context: CallbackContext):
+async def movie_selected(update: Update, context: ContextTypes):
     query = update.callback_query
     await query.answer()
     movie_id = query.data.split("_")[1]
